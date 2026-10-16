@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>نجدة - Najda</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#d32f2f">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#f6f6f7;--fg:#1c1c1e;--card:#fff;--bd:#e2e2e6;--mut:#6b6b73;--red:#d32f2f;--ok:#2e7d32;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121214;--fg:#f2f2f5;--card:#1e1e22;--bd:#34343a;--mut:#a0a0aa}}
+:root[data-theme="dark"]{--bg:#121214;--fg:#f2f2f5;--card:#1e1e22;--bd:#34343a;--mut:#a0a0aa}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;display:flex;flex-direction:column}
+header{background:var(--red);color:#fff;padding:12px 16px;font-weight:700;font-size:20px}
+main{flex:1;overflow-y:auto;padding:14px}
+nav{display:flex;background:var(--card);border-top:1px solid var(--bd)}
+nav button{flex:1;border:0;background:none;color:var(--mut);padding:8px 2px;font:inherit;font-size:12px;cursor:pointer}
+nav button span{display:block;font-size:20px}
+nav button.on{color:var(--red);font-weight:700}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+h2{margin:0 0 10px;font-size:18px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
+.btn{display:inline-block;background:var(--red);color:#fff;border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none;text-align:center}
+.btn.sec{background:var(--card);color:var(--fg);border:1px solid var(--bd)}
+.btn.full{display:block;width:100%;margin-top:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:20px;padding:7px 12px;font:inherit;cursor:pointer}
+.chip.on{background:var(--red);color:#fff;border-color:var(--red)}
+.row{display:flex;align-items:center;gap:10px}
+.row .g{flex:1}
+.mut{color:var(--mut);font-size:13px}
+#sos{position:fixed;inset-inline-start:14px;bottom:calc(76px + env(safe-area-inset-bottom,0px));background:var(--red);color:#fff;border:0;border-radius:30px;padding:14px 20px;font-size:17px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;z-index:5}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;z-index:10}
+.modal.show{display:flex}
+.sheet{background:var(--card);width:100%;border-radius:16px 16px 0 0;padding:16px;max-height:85%;overflow:auto}
+.thumbs img{width:80px;height:80px;object-fit:cover;border-radius:8px;margin:6px 0 0 6px}
+svg text{font-family:inherit}
+</style>
+</head>
+<body>
+<header>🚨 نجدة</header>
+<main id="main"></main>
+<button id="sos" onclick="openSos()">🆘 SOS</button>
+<nav id="nav"></nav>
+<div class="modal" id="modal" onclick="if(event.target===this)closeModal()"><div class="sheet" id="sheet"></div></div>
+
+<script>
+// ===== إعدادات الدولة (للتوسع الدولي غيّرها) =====
+const COUNTRY={name:'مصر',police:'122',amb:'123',fire:'180',traffic:'128',center:{lat:30.0444,lng:31.2357}};
+const T={fire:['🔥','حريق','#e53935'],acc:['🚗','حادث','#d81b60'],pot:['⚠️','حفرة','#f57c00'],rep:['🚧','إصلاحات','#c9a000'],clo:['⛔','طريق مقفول','#6d4c41'],fog:['🌫️','شبورة','#546e7a']};
+const TOWS=[ // بيانات تجريبية: استبدلها بشركات حقيقية
+{n:'ونش المعادي (تجريبي)',ph:'01000000001',p:25,r:4.6,lat:29.9602,lng:31.2569},
+{n:'ونش مدينة نصر (تجريبي)',ph:'01000000002',p:30,r:4.3,lat:30.0626,lng:31.33},
+{n:'ونش 6 أكتوبر (تجريبي)',ph:'01000000003',p:28,r:4.8,lat:29.9285,lng:30.9188},
+{n:'ونش الجيزة (تجريبي)',ph:'01000000004',p:27,r:4.1,lat:30.0131,lng:31.2089}];
+const INS=['مصر للتأمين','أليانز مصر','GIG مصر','الدلتا للتأمين','المهندس للتأمين','الشرق للتأمين','شركة أخرى'];
+
+let tab='map',me=null,scale=20,rtype='pot',photos=[],tphotos=[];
+let reports=load()||[
+{t:'pot',note:'حفرة عميقة في الحارة اليمنى',lat:30.05,lng:31.24,time:Date.now()},
+{t:'rep',note:'أعمال إصلاح طريق',lat:30.03,lng:31.22,time:Date.now()},
+{t:'acc',note:'حادث تصادم بسيط',lat:30.06,lng:31.27,time:Date.now()}];
+
+function load(){try{return JSON.parse(localStorage.getItem('najda_reports'))}catch(e){return null}}
+function save(){try{localStorage.setItem('najda_reports',JSON.stringify(reports))}catch(e){}}
+function getPos(){return new Promise(r=>{if(!navigator.geolocation)return r(null);
+navigator.geolocation.getCurrentPosition(p=>{me={lat:p.coords.latitude,lng:p.coords.longitude};r(me)},()=>r(null),{enableHighAccuracy:true,timeout:10000})})}
+function km(a,b){const R=6371,d=x=>x*Math.PI/180,dl=d(b.lat-a.lat),dn=d(b.lng-a.lng);
+const h=Math.sin(dl/2)**2+Math.cos(d(a.lat))*Math.cos(d(b.lat))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+const gmap=(la,ln)=>`https://maps.google.com/?q=${la},${ln}`;
+const wa=t=>`https://wa.me/?text=${encodeURIComponent(t)}`;
+const $=id=>document.getElementById(id);
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function openModal(h){$('sheet').innerHTML=h;$('modal').classList.add('show')}
+function closeModal(){$('modal').classList.remove('show')}
+
+// ===== التنقل =====
+const TABS=[['map','🗺️','الخريطة'],['road','🚧','بلاغ طريق'],['tow','🚚','ونش'],['ins','🛡️','تأمين']];
+function go(t){tab=t;render()}
+function render(){
+ $('nav').innerHTML=TABS.map(x=>`<button class="${tab===x[0]?'on':''}" onclick="go('${x[0]}')"><span>${x[1]}</span>${x[2]}</button>`).join('');
+ $('main').innerHTML={map:vMap,road:vRoad,tow:vTow,ins:vIns}[tab]();
+}
+
+// ===== الخريطة (رادار تخطيطي حول موقعك) =====
+function vMap(){
+ const c=me||COUNTRY.center,R=135;
+ const pts=reports.map((r,i)=>{
+  const x=(r.lng-c.lng)*111*Math.cos(c.lat*Math.PI/180)/scale*R,y=-(r.lat-c.lat)*111/scale*R;
+  if(Math.hypot(x,y)>R+8)return '';
+  return `<g onclick="showReport(${i})" style="cursor:pointer"><circle cx="${150+x}" cy="${150+y}" r="13" fill="${T[r.t][2]}"/><text x="${150+x}" y="${155+y}" text-anchor="middle" font-size="14">${T[r.t][0]}</text></g>`}).join('');
+ return `<div class="card"><div class="row"><h2 class="g">البلاغات حواليك</h2><button class="btn sec" onclick="locate()">📍 موقعي</button></div>
+ <svg viewBox="0 0 300 300" style="width:100%;max-width:420px;display:block;margin:auto">
+ <circle cx="150" cy="150" r="135" fill="none" stroke="var(--bd)" stroke-width="2"/><circle cx="150" cy="150" r="90" fill="none" stroke="var(--bd)"/><circle cx="150" cy="150" r="45" fill="none" stroke="var(--bd)"/>
+ <line x1="150" y1="15" x2="150" y2="285" stroke="var(--bd)"/><line x1="15" y1="150" x2="285" y2="150" stroke="var(--bd)"/>
+ ${pts}<circle cx="150" cy="150" r="8" fill="#1976d2" stroke="#fff" stroke-width="3"/></svg>
+ <div class="row" style="margin-top:8px"><span class="mut">نصف القطر:</span>
+ <div class="chips">${[2,5,20,50].map(s=>`<button class="chip ${scale===s?'on':''}" onclick="scale=${s};render()">${s} كم</button>`).join('')}</div></div>
+ <p class="mut">${me?'النقطة الزرقاء هي موقعك.':'اضغط "موقعي" لتحديد مكانك. الآن المركز القاهرة.'}</p></div>
+ <h2>آخر البلاغات</h2>${reports.map((r,i)=>`<div class="card row" onclick="showReport(${i})"><span style="font-size:26px">${T[r.t][0]}</span><div class="g"><b>${T[r.t][1]}</b><div class="mut">${esc(r.note||'بدون تفاصيل')}</div></div><span class="mut">${me?km(me,r).toFixed(1)+' كم':''}</span></div>`).join('')}`;
+}
+async function locate(){const p=await getPos();if(!p)alert('فعّل الموقع (GPS) واسمح للمتصفح باستخدامه');render()}
+function showReport(i){const r=reports[i];openModal(`<h2>${T[r.t][0]} ${T[r.t][1]}</h2><p>${esc(r.note||'بدون تفاصيل')}</p><p class="mut">${new Date(r.time).toLocaleString('ar-EG')}</p>
+<a class="btn full" href="${gmap(r.lat,r.lng)}" target="_blank" rel="noopener">افتح في خرائط جوجل</a><button class="btn sec full" onclick="closeModal()">إغلاق</button>`)}
+
+// ===== بلاغ طريق =====
+function vRoad(){
+ return `<div class="card"><h2>بلّغ عن مشكلة في الطريق</h2>
+ <div class="chips">${Object.keys(T).map(k=>`<button class="chip ${rtype===k?'on':''}" onclick="rtype='${k}';render()">${T[k][0]} ${T[k][1]}</button>`).join('')}</div>
+ <label>تفاصيل (اختياري)</label><textarea id="rnote" rows="3"></textarea>
+ <label>صورة (اختياري)</label><input type="file" accept="image/*" capture="environment" onchange="pick(this,'p')">
+ <div class="thumbs" id="pth">${photos.map(u=>`<img src="${u}">`).join('')}</div>
+ <button class="btn full" onclick="sendRoad()">إرسال البلاغ بموقعي الحالي</button></div>`;
+}
+function pick(el,w){const f=el.files[0];if(!f)return;const u=URL.createObjectURL(f);
+ if(w==='p'){photos=[u];$('pth').innerHTML=`<img src="${u}">`}else{tphotos.push(f);$('ith').innerHTML+=`<img src="${u}">`}}
+async function sendRoad(){const p=await getPos();if(!p)return alert('محتاجين موقعك، فعّل الـ GPS');
+ reports.unshift({t:rtype,note:$('rnote').value.trim(),lat:p.lat,lng:p.lng,time:Date.now()});save();photos=[];tab='map';render()}
+
+// ===== الونش =====
+function vTow(){
+ const l=TOWS.map(t=>({...t,d:me?km(me,t):null}));if(me)l.sort((a,b)=>a.d-b.d);
+ return `<div class="row"><h2 class="g">استدعاء ونش</h2><button class="btn sec" onclick="getPos().then(render)">📍 رتّب بالأقرب</button></div>
+ <p class="mut">${me?'مرتبة من الأقرب للأبعد':'اضغط الزرار لترتيب القائمة حسب موقعك'}</p>
+ ${l.map(t=>`<div class="card row"><span style="font-size:28px">🚚</span><div class="g"><b>${t.n}</b><div class="mut">⭐ ${t.r} • ${t.p} جنيه/كم${t.d!=null?' • '+t.d.toFixed(1)+' كم':''}</div></div><a class="btn" href="tel:${t.ph}">اتصل</a></div>`).join('')}
+ <p class="mut">الأرقام والأسعار تجريبية لحين الاتفاق مع شركات ونش حقيقية.</p>`;
+}
+
+// ===== بلاغ التأمين =====
+function vIns(){
+ tphotos=[];
+ return `<div class="card"><h2>بلاغ لشركة التأمين</h2>
+ <label>شركة التأمين</label><select id="ic">${INS.map(c=>`<option>${c}</option>`).join('')}</select>
+ <label>رقم الوثيقة</label><input id="ip">
+ <label>رقم لوحة السيارة</label><input id="il">
+ <label>وصف الحادث</label><textarea id="id" rows="3"></textarea>
+ <label>صور الحادث</label><input type="file" accept="image/*" capture="environment" onchange="pick(this,'i')">
+ <div class="thumbs" id="ith"></div>
+ <button class="btn full" onclick="sendIns()">جهّز البلاغ وشاركه</button>
+ <p class="mut">يُضاف موقعك والوقت تلقائيًا كدليل، وتختار تطبيق المشاركة (واتساب/إيميل).</p></div>`;
+}
+async function sendIns(){
+ const p=await getPos(),d=new Date().toLocaleString('ar-EG'),v=id=>$(id).value.trim()||'-';
+ const txt=`بلاغ حادث - ${$('ic').value}\nالتاريخ: ${d}\nرقم الوثيقة: ${v('ip')}\nرقم السيارة: ${v('il')}\nالوصف: ${v('id')}\nالموقع: ${p?gmap(p.lat,p.lng):'غير متاح'}`;
+ try{if(navigator.canShare&&tphotos.length&&navigator.canShare({files:tphotos})){await navigator.share({text:txt,files:tphotos});return}
+  if(navigator.share){await navigator.share({text:txt});return}}catch(e){if(e.name==='AbortError')return}
+ window.open(wa(txt),'_blank')}
+
+// ===== SOS =====
+function openSos(){
+ const o=[['🔥','حريق',COUNTRY.fire,'fire'],['🚑','حادث / إسعاف',COUNTRY.amb,'acc'],['👮','شرطة',COUNTRY.police,'acc'],['🚦','شرطة المرور',COUNTRY.traffic,'acc']];
+ openModal(`<h2>إيه نوع الطوارئ؟</h2>`+o.map(x=>`<div class="card row" onclick="sos('${x[1]}','${x[2]}','${x[3]}')" style="cursor:pointer"><span style="font-size:28px">${x[0]}</span><div class="g"><b>${x[1]}</b><div class="mut">رقم ${x[2]}</div></div></div>`).join('')+`<button class="btn sec full" onclick="closeModal()">إلغاء</button>`)}
+async function sos(label,num,type){
+ openModal(`<h2>جاري تحديد موقعك...</h2>`);
+ const p=await getPos();
+ if(p){reports.unshift({t:type,note:'بلاغ SOS: '+label,lat:p.lat,lng:p.lng,time:Date.now()});save()}
+ const msg=`نجدة! حالة طوارئ: ${label}`+(p?`\nموقعي: ${gmap(p.lat,p.lng)}`:'');
+ openModal(`<h2>🆘 ${label}</h2><p>${p?`تم تحديد موقعك:<br><span class="mut">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</span>`:'مقدرتش أحدد موقعك. فعّل الـ GPS، وتقدر تتصل دلوقتي.'}</p>
+ <a class="btn full" href="tel:${num}">📞 اتصل ${num}</a>${p?`<a class="btn sec full" href="${wa(msg)}" target="_blank" rel="noopener">📤 ابعت موقعي على واتساب</a>`:''}
+ <button class="btn sec full" onclick="closeModal();render()">إغلاق</button>`)}
+
+render();
+try{if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js")}catch(e){}
+</script>
+</body>
+</html>
